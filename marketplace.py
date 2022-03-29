@@ -5,7 +5,16 @@ Computer Systems Architecture Course
 Assignment 1
 March 2021
 """
+import unittest
 
+
+# TODO: will test the functioning
+# of all methods defined by Marketplace
+# if other methods will be added, tests will
+# be added as well
+class TestMarketplace(unittest.TestCase):
+    def test_upper(self):
+        self.assertEqual('foo'.upper(), 'FOO')
 
 class Marketplace:
     """
@@ -19,7 +28,7 @@ class Marketplace:
         :type queue_size_per_producer: Int
         :param queue_size_per_producer: the maximum size of a queue associated with each producer
         """
-        pass
+        self.queue_size_per_producer = queue_size_per_producer
 
     def register_producer(self):
         """

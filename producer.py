@@ -31,7 +31,14 @@ class Producer(Thread):
         @type kwargs:
         @param kwargs: other arguments that are passed to the Thread's __init__()
         """
-        pass
+        super().__init__(kwargs)
+        self.products = products
+        self.markeplace = marketplace
+        self.republish_wait_time = republish_wait_time
 
     def run(self):
+        # try republishing
+        # while (!marketplace.publish(super().name, product)
+        #   wait (republish_wait_time)
+
         pass

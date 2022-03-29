@@ -31,7 +31,21 @@ class Consumer(Thread):
         :type kwargs:
         :param kwargs: other arguments that are passed to the Thread's __init__()
         """
-        pass
+        super().__init__(kwargs)
+        self.carts = carts
+        self.marketplace = marketplace
+        self.retry_wait_time = retry_wait_time
 
     def run(self):
+
+        # receives id of cart
+        # cart_id = marketplace.new_cart()
+
+        # adds/deletes items from cart
+        # marketplace.add_to_cart(cart_id, product)
+        # marketplace.remove_from_cart(cart_id, product)
+
+        # places command
+        # marketplace.place_order(cart_id)
+
         pass
