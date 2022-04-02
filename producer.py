@@ -42,8 +42,6 @@ class Producer(Thread):
         # register to the marketplace
         id_producer = self.marketplace.register_producer()
 
-        print(f"A fost alocat producatorul cu id-ul: {id_producer}")
-
         # try republishing
         while(1):
             # iterate through products
@@ -52,12 +50,6 @@ class Producer(Thread):
                 time_production = product[self.wait_product_pos]
                 sleep(time_production)
                 for i in range(1, quantity_product + 1):
-                    has_published = self.marketplace.publish(id_producer, product[0])
-                    if (not(has_published)):
+                    # check if there is place to publish
+                    while not(self.marketplace.publish(id_producer, product[0])):
                         sleep(self.republish_wait_time)
-
-            sleep(3)
-        # while (!marketplace.publish(super().name, product)
-        #   wait (republish_wait_time)
-
-        return

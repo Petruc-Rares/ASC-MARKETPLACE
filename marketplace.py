@@ -43,7 +43,8 @@ class Marketplace:
         self.queue_size_per_producer = queue_size_per_producer
         self.no_producers_registered = AtomicInteger()
         self.no_last_cart = AtomicInteger()
-        self.dict_info_producers = {}
+        self.info_producers = {}
+        self.info_carts = {}
 
     def register_producer(self):
         """
@@ -54,7 +55,7 @@ class Marketplace:
         # the second one that holds info about the number of coffees
         # available and the third one that holds the number of teas
         # available
-        self.dict_info_producers[self.no_producers_registered.getNumber()] = [
+        self.info_producers[self.no_producers_registered.getNumber()] = [
             Semaphore(value=self.queue_size_per_producer),
             Semaphore(value=0),
             Semaphore(value=0)]
@@ -72,18 +73,15 @@ class Marketplace:
 
         :returns True or False. If the caller receives False, it should wait and then try again.
         """
-        if (self.dict_info_producers[producer_id][self.empty_semaphore_pos]._value <= 0):
-            return False
 
-        self.dict_info_producers[producer_id][self.empty_semaphore_pos].acquire()
+        result_acquire = self.info_producers[producer_id][self.empty_semaphore_pos].acquire(timeout=0.1)
+        if not(result_acquire):
+            self.info_producers[producer_id][self.empty_semaphore_pos].release()
+            return result_acquire
         if product.__class__.__name__ == 'Coffee':
-            self.dict_info_producers[producer_id][self.available_coffees_pos].release()
+            self.info_producers[producer_id][self.available_coffees_pos].release()
         if product.__class__.__name__ == 'Tea':
-            self.dict_info_producers[producer_id][self.available_teas_pos].release()
-
-        print(self.dict_info_producers[producer_id][self.empty_semaphore_pos]._value)
-        print(self.dict_info_producers[producer_id][self.available_coffees_pos]._value)
-        print(self.dict_info_producers[producer_id][self.available_teas_pos]._value)
+            self.info_producers[producer_id][self.available_teas_pos].release()
 
         return True
 
@@ -93,7 +91,15 @@ class Marketplace:
 
         :returns an int representing the cart_id
         """
-        pass
+        self.info_carts[self.no_last_cart.getNumber()] = []
+        return self.no_last_cart.getAndIncrement()
+
+    def get_sem_position(self, product):
+        if (product.__class__.__name__ == 'Coffee'):
+            look_for_pos = self.available_coffees_pos
+        elif (product.__class__.__name__ == 'Tea'):
+            look_for_pos = self.available_teas_pos
+        return look_for_pos
 
     def add_to_cart(self, cart_id, product):
         """
@@ -107,7 +113,21 @@ class Marketplace:
 
         :returns True or False. If the caller receives False, it should wait and then try again
         """
-        pass
+        look_for_pos = self.get_sem_position(product)
+
+        for product_id, semaphores in self.info_producers.items():
+            result_acquire = semaphores[look_for_pos].acquire(timeout=0.1)
+            if not result_acquire:
+                semaphores[look_for_pos].release()
+                return False
+            else:
+                # the producer with product_id can produce again
+                self.info_producers[product_id][self.empty_semaphore_pos].release()
+                self.info_carts[cart_id].append((product_id, product))
+                return True
+
+        # no producer has the desired product
+        return False
 
     def remove_from_cart(self, cart_id, product):
         """
@@ -119,7 +139,23 @@ class Marketplace:
         :type product: Product
         :param product: the product to remove from cart
         """
-        pass
+        look_for_position = self.get_sem_position(product)
+
+        for (product_id, key) in self.info_carts[cart_id]:
+            #print(product_id, key)
+            if key == product:
+                self.info_carts[cart_id].remove((product_id, key))
+                # remove one available product offered by product_id
+                self.info_producers[product_id][look_for_position].release()
+                # determine producer not to produce other stuff, as there are still
+                # unsold items; fails if producer already can't produce other stuff
+                self.info_producers[product_id][self.empty_semaphore_pos].acquire(timeout=0.1)
+                break
+
+    def print_semaphores(self, product_id):
+        print(f"cat poate produce: {self.info_producers[product_id][self.empty_semaphore_pos]._value}")
+        print(f"cat ceai e disponibil: {self.info_producers[product_id][self.available_teas_pos]._value}")
+        print(f"cata cafea e disponibila: {self.info_producers[product_id][self.available_coffees_pos]._value}")
 
     def place_order(self, cart_id):
         """
@@ -128,4 +164,8 @@ class Marketplace:
         :type cart_id: Int
         :param cart_id: id cart
         """
-        pass
+        for (prod_id, product) in self.info_carts[cart_id]:
+            self.info_producers[prod_id][self.empty_semaphore_pos].release()
+
+
+        return self.info_carts[cart_id]
