@@ -7,12 +7,14 @@ March 2021
 """
 
 from threading import Thread
-
+from time import sleep
 
 class Producer(Thread):
     """
     Class that represents a producer.
     """
+    quantity_product_pos = 1
+    wait_product_pos = 2
 
     def __init__(self, products, marketplace, republish_wait_time, **kwargs):
         """
@@ -31,14 +33,31 @@ class Producer(Thread):
         @type kwargs:
         @param kwargs: other arguments that are passed to the Thread's __init__()
         """
-        super().__init__(kwargs)
+        super().__init__(kwargs=kwargs)
         self.products = products
-        self.markeplace = marketplace
+        self.marketplace = marketplace
         self.republish_wait_time = republish_wait_time
 
     def run(self):
+        # register to the marketplace
+        id_producer = self.marketplace.register_producer()
+
+        print(f"A fost alocat producatorul cu id-ul: {id_producer}")
+
         # try republishing
+        while(1):
+            # iterate through products
+            for product in self.products:
+                quantity_product = product[self.quantity_product_pos]
+                time_production = product[self.wait_product_pos]
+                sleep(time_production)
+                for i in range(1, quantity_product + 1):
+                    has_published = self.marketplace.publish(id_producer, product[0])
+                    if (not(has_published)):
+                        sleep(self.republish_wait_time)
+
+            sleep(3)
         # while (!marketplace.publish(super().name, product)
         #   wait (republish_wait_time)
 
-        pass
+        return
