@@ -6,18 +6,44 @@ Assignment 1
 March 2021
 """
 import unittest
-
-# TODO: will test the functioning
-# of all methods defined by Marketplace
-# if other methods will be added, tests will
-# be added as well
 from tema.atomicInteger import AtomicInteger
-from threading import Semaphore
-
+from threading import Semaphore, Lock
+from tema.product import Tea, Coffee
+from tema.producer import Producer
 
 class TestMarketplace(unittest.TestCase):
-    def test_upper(self):
-        self.assertEqual('foo'.upper(), 'FOO')
+    def setUp(self):
+        self.queue_size_per_producer = 10
+        self.marketplace = Marketplace(self.queue_size_per_producer)
+
+    def test_register_producer(self):
+        for i in range(0, 50):
+            producer_id = self.marketplace.register_producer()
+            self.assertEqual(producer_id, i)
+
+    def test_publish(self):
+        # all products should be published until the queue
+        # maximum size is reached
+        producer_id = self.marketplace.register_producer()
+        product = Tea(name='TestTea', price=4, type='Herbal')
+
+        for i in range(1, self.queue_size_per_producer + 1):
+            self.assertEqual(self.marketplace.publish(producer_id, product), True)
+            
+        for i in range(1, self.queue_size_per_producer + 1):
+            self.assertEqual(self.marketplace.publish(producer_id, product), False)
+
+    def test_new_cart(self):
+        for i in range(0, 80):
+            self.assertEqual(self.marketplace.new_cart(), i)
+
+    def test_get_sem_position(self):
+        product_tea = Tea(name='TestTea', price=4, type='Herbal')
+        product_coffee = Coffee(name='TestCoffee',price=5, acidity='test_acidity', roast_level='test_roast_level')
+
+        self.assertEqual(self.marketplace.get_sem_position(product_tea), self.marketplace.available_teas_pos)
+        self.assertEqual(self.marketplace.get_sem_position(product_coffee), self.marketplace.available_coffees_pos)
+
 
 
 class Marketplace:
@@ -40,6 +66,7 @@ class Marketplace:
         :type queue_size_per_producer: Int
         :param queue_size_per_producer: the maximum size of a queue associated with each producer
         """
+        self.lock = Lock()
         self.queue_size_per_producer = queue_size_per_producer
         self.no_producers_registered = AtomicInteger()
         self.no_last_cart = AtomicInteger()
@@ -59,6 +86,7 @@ class Marketplace:
             Semaphore(value=self.queue_size_per_producer),
             Semaphore(value=0),
             Semaphore(value=0)]
+
         return self.no_producers_registered.getAndIncrement()
 
     def publish(self, producer_id, product):
@@ -76,8 +104,8 @@ class Marketplace:
 
         result_acquire = self.info_producers[producer_id][self.empty_semaphore_pos].acquire(timeout=0.1)
         if not(result_acquire):
-            self.info_producers[producer_id][self.empty_semaphore_pos].release()
-            return result_acquire
+            #self.info_producers[producer_id][self.empty_semaphore_pos].release()
+            return False
         if product.__class__.__name__ == 'Coffee':
             self.info_producers[producer_id][self.available_coffees_pos].release()
         if product.__class__.__name__ == 'Tea':
@@ -116,11 +144,10 @@ class Marketplace:
         look_for_pos = self.get_sem_position(product)
 
         for product_id, semaphores in self.info_producers.items():
+            #print(f'inainte de not {look_for_pos} pt {product_id}')
+            #self.print_semaphores(product_id)
             result_acquire = semaphores[look_for_pos].acquire(timeout=0.1)
-            if not result_acquire:
-                semaphores[look_for_pos].release()
-                return False
-            else:
+            if result_acquire:
                 # the producer with product_id can produce again
                 self.info_producers[product_id][self.empty_semaphore_pos].release()
                 self.info_carts[cart_id].append((product_id, product))
@@ -144,12 +171,14 @@ class Marketplace:
         for (product_id, key) in self.info_carts[cart_id]:
             #print(product_id, key)
             if key == product:
+                # determine producer not to produce other stuff, as there are still
+                # unsold items; fails if producer already can't produce other stuff
+                rc = self.info_producers[product_id][self.empty_semaphore_pos].acquire(timeout=0.1)
+                if rc == False:
+                    continue
                 self.info_carts[cart_id].remove((product_id, key))
                 # remove one available product offered by product_id
                 self.info_producers[product_id][look_for_position].release()
-                # determine producer not to produce other stuff, as there are still
-                # unsold items; fails if producer already can't produce other stuff
-                self.info_producers[product_id][self.empty_semaphore_pos].acquire(timeout=0.1)
                 break
 
     def print_semaphores(self, product_id):
@@ -166,6 +195,8 @@ class Marketplace:
         """
         for (prod_id, product) in self.info_carts[cart_id]:
             self.info_producers[prod_id][self.empty_semaphore_pos].release()
+            look_for_pos = self.get_sem_position(product)
+            self.info_producers[prod_id][look_for_pos].release()
 
 
         return self.info_carts[cart_id]
