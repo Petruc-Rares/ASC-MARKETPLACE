@@ -5,11 +5,28 @@ Computer Systems Architecture Course
 Assignment 1
 March 2021
 """
+
 import unittest
-from tema.atomicInteger import AtomicInteger
+#import logging
+#from logging.handlers import RotatingFileHandler
+
 from threading import Semaphore, Lock
+from tema.atomicInteger import AtomicInteger
 from tema.product import Tea, Coffee
-from tema.producer import Producer
+
+#logging.shutdown()
+#logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
+
+#formatter = logging.Formatter('%(asctime)s:%(message)s')
+
+#handler = RotatingFileHandler('marketplace.log', maxBytes=10000, backupCount=10)
+#handler.setLevel(logging.INFO)
+#formatter.converter = time.gmtime()
+#handler.setFormatter(formatter)
+
+#logger.addHandler(handler)
+
 
 class TestMarketplace(unittest.TestCase):
     def setUp(self):
@@ -27,10 +44,10 @@ class TestMarketplace(unittest.TestCase):
         producer_id = self.marketplace.register_producer()
         product = Tea(name='TestTea', price=4, type='Herbal')
 
-        for i in range(1, self.queue_size_per_producer + 1):
+        for _ in range(1, self.queue_size_per_producer + 1):
             self.assertEqual(self.marketplace.publish(producer_id, product), True)
-            
-        for i in range(1, self.queue_size_per_producer + 1):
+
+        for _ in range(1, self.queue_size_per_producer + 1):
             self.assertEqual(self.marketplace.publish(producer_id, product), False)
 
     def test_new_cart(self):
@@ -39,10 +56,15 @@ class TestMarketplace(unittest.TestCase):
 
     def test_get_sem_position(self):
         product_tea = Tea(name='TestTea', price=4, type='Herbal')
-        product_coffee = Coffee(name='TestCoffee',price=5, acidity='test_acidity', roast_level='test_roast_level')
+        product_coffee = Coffee(name='TestCoffee', price=5,
+                                acidity='test_acidity',
+                                roast_level='test_roast_level')
 
-        self.assertEqual(self.marketplace.get_sem_position(product_tea), self.marketplace.available_teas_pos)
-        self.assertEqual(self.marketplace.get_sem_position(product_coffee), self.marketplace.available_coffees_pos)
+        self.assertEqual(self.marketplace.get_sem_position(product_tea),
+                        self.marketplace.available_teas_pos)
+
+        self.assertEqual(self.marketplace.get_sem_position(product_coffee),
+                        self.marketplace.available_coffees_pos)
 
     def test_add_to_cart(self):
         # try to add to cart something not published/available
@@ -52,11 +74,13 @@ class TestMarketplace(unittest.TestCase):
 
         # try to add to cart something that is available
         cart2 = self.marketplace.new_cart()
-        product_coffee = Coffee(name='ExistingCoffee',price=5, acidity='test_acidity', roast_level='test_roast_level')
+        product_coffee = Coffee(name='ExistingCoffee', price=5,
+                                acidity='test_acidity',
+                                roast_level='test_roast_level')
         producer_id = self.marketplace.register_producer()
         self.marketplace.publish(producer_id, product_coffee)
         self.assertEqual(self.marketplace.add_to_cart(cart2, product_coffee), True)
-        
+
     def test_remove_from_cart(self):
         # try to delete something inexistent from cart
         cart1 = self.marketplace.new_cart()
@@ -65,8 +89,10 @@ class TestMarketplace(unittest.TestCase):
 
         # try to delete something that exists
         cart2 = self.marketplace.new_cart()
-        product_coffee = Coffee(name='ExistingCoffee',price=5, acidity='test_acidity', roast_level='test_roast_level')
-        
+        product_coffee = Coffee(name='ExistingCoffee', price=5,
+                                acidity='test_acidity',
+                                roast_level='test_roast_level')
+
         producer_id = self.marketplace.register_producer()
         self.marketplace.publish(producer_id, product_coffee)
 
@@ -76,7 +102,9 @@ class TestMarketplace(unittest.TestCase):
     def test_place_order(self):
         cart = self.marketplace.new_cart()
         product_tea = Tea(name='ExistingTea', price=4, type='Herbal')
-        product_coffee = Coffee(name='ExistingCoffee',price=5, acidity='test_acidity', roast_level='test_roast_level')
+        product_coffee = Coffee(name='ExistingCoffee', price=5,
+                                acidity='test_acidity',
+                                roast_level='test_roast_level')
         producer_id = self.marketplace.register_producer()
 
         self.marketplace.publish(producer_id, product_coffee)
@@ -89,7 +117,8 @@ class TestMarketplace(unittest.TestCase):
         self.marketplace.add_to_cart(cart, product_tea)
         self.marketplace.remove_from_cart(cart, product_coffee)
 
-        self.assertListEqual(self.marketplace.place_order(cart), [(producer_id, product_coffee), (producer_id, product_tea)])
+        self.assertListEqual(self.marketplace.place_order(cart),
+                             [(producer_id, product_coffee), (producer_id, product_tea)])
 
 
 class Marketplace:
@@ -133,6 +162,8 @@ class Marketplace:
             Semaphore(value=0),
             Semaphore(value=0)]
 
+        #logger.info(f"A producer was registered with id:
+        #  {self.no_producers_registered.getNumber()}")
         return self.no_producers_registered.getAndIncrement()
 
     def publish(self, producer_id, product):
@@ -149,13 +180,16 @@ class Marketplace:
         """
 
         result_acquire = self.info_producers[producer_id][self.empty_semaphore_pos].acquire(timeout=0.1)
-        if not(result_acquire):
-            #self.info_producers[producer_id][self.empty_semaphore_pos].release()
+
+        if not result_acquire:
+            #logger.info(f"Producer with id:{producer_id} tried, but did not publish {product}")
             return False
         if product.__class__.__name__ == 'Coffee':
             self.info_producers[producer_id][self.available_coffees_pos].release()
         if product.__class__.__name__ == 'Tea':
             self.info_producers[producer_id][self.available_teas_pos].release()
+
+        #logger.info(f"Producer with id:{producer_id} published {product}")
 
         return True
 
@@ -166,13 +200,24 @@ class Marketplace:
         :returns an int representing the cart_id
         """
         self.info_carts[self.no_last_cart.getNumber()] = []
+
+        #logger.info(f"Cart with id {self.no_last_cart.getNumber()} was created")
         return self.no_last_cart.getAndIncrement()
 
     def get_sem_position(self, product):
-        if (product.__class__.__name__ == 'Coffee'):
+        """
+        Gets the position for product
+
+        :type product: Product
+        :param product: product
+
+        :returns an int representing the semaphore position
+        """
+        if product.__class__.__name__ == 'Coffee':
             look_for_pos = self.available_coffees_pos
-        elif (product.__class__.__name__ == 'Tea'):
+        elif product.__class__.__name__ == 'Tea':
             look_for_pos = self.available_teas_pos
+        #logger.info(f"For product: {product}, position to look at semaphores is {look_for_pos}")
         return look_for_pos
 
     def add_to_cart(self, cart_id, product):
@@ -190,14 +235,16 @@ class Marketplace:
         look_for_pos = self.get_sem_position(product)
 
         for product_id, semaphores in self.info_producers.items():
-            #print(f'inainte de not {look_for_pos} pt {product_id}')
-            #self.print_semaphores(product_id)
+            # print(f'inainte de not {look_for_pos} pt {product_id}')
+            # self.print_semaphores(product_id)
             result_acquire = semaphores[look_for_pos].acquire(timeout=0.1)
             if result_acquire:
                 self.info_carts[cart_id].append((product_id, product))
+                #logger.info(f"{product} has been added to cart with id: {cart_id}")
                 return True
 
         # no producer has the desired product
+        #logger.info(f"{product} has NOT been added to cart with id: {cart_id}")
         return False
 
     def remove_from_cart(self, cart_id, product):
@@ -217,14 +264,11 @@ class Marketplace:
                 self.info_carts[cart_id].remove((product_id, key))
                 # remove one available product offered by product_id
                 self.info_producers[product_id][look_for_position].release()
+                #logger.info(f"{product} was successfully removed from cart with id: {cart_id}")
                 return True
 
+        #logger.info(f"{product} was NOT removed from cart with id: {cart_id}")
         return False
-
-    def print_semaphores(self, product_id):
-        print(f"cat poate produce: {self.info_producers[product_id][self.empty_semaphore_pos]._value}")
-        print(f"cat ceai e disponibil: {self.info_producers[product_id][self.available_teas_pos]._value}")
-        print(f"cata cafea e disponibila: {self.info_producers[product_id][self.available_coffees_pos]._value}")
 
     def place_order(self, cart_id):
         """
@@ -233,7 +277,8 @@ class Marketplace:
         :type cart_id: Int
         :param cart_id: id cart
         """
-        for (prod_id, product) in self.info_carts[cart_id]:
+        for (prod_id, _) in self.info_carts[cart_id]:
             self.info_producers[prod_id][self.empty_semaphore_pos].release()
 
+        #logger.info(f"cart with id {cart_id} has the products {self.info_carts[cart_id]}")
         return self.info_carts[cart_id]

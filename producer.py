@@ -43,13 +43,13 @@ class Producer(Thread):
         id_producer = self.marketplace.register_producer()
 
         # try republishing
-        while(1):
+        while 1:
             # iterate through products
             for product in self.products:
                 quantity_product = product[self.quantity_product_pos]
                 time_production = product[self.wait_product_pos]
                 sleep(time_production)
-                for i in range(1, quantity_product + 1):
+                for _ in range(1, quantity_product + 1):
                     # check if there is place to publish
-                    while not(self.marketplace.publish(id_producer, product[0])):
+                    while not self.marketplace.publish(id_producer, product[0]):
                         sleep(self.republish_wait_time)
