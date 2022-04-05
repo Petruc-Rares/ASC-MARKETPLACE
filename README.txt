@@ -1,14 +1,14 @@
 Organizarea
 Am lucrat tema foarte indeaproape de scheletul oferit (am adus foarte mici
 modificari; spre exemplu, am adaugat clasa atomicInteger si variabile statice
-pentru pozitiile semafoarelor folosite in clasa marketplace)
+pentru pozitia semaforului si a listei de produse pentru un producator)
 
 Tema mi-a placut. Cu siguranta mi-am imbunatatit modul de lucru cu Python.
 Am imbinat cunostintele din primele laboratoare de ASC impreuna cu ceea ce
 am invatat la APD. 
 
 Implementarea mea o consider eficienta. Totusi, am pus valorile la timeout
-ca parametru pentru acquire-uri destul de empiric, cat sa nu afecteze mult
+ca parametru pentru acquire destul de empiric, cat sa nu afecteze mult
 timpul de rulare al testelor.
 
 Implementare
@@ -22,5 +22,5 @@ respectiv, eu consideram ca producatorul poate produce din nou
 si am avut ceva probleme cu asta (marind cumva capacitatea
 de productie a capacitorului dincolo de limita specificata
 in constructorul marketplace-ului). Astfel, am luat decizia
-ca producatorul sa nu poate produce pana se plaseaza comanda.
-
+ca producatorul sa nu poate produce pana se plaseaza o comanda
+care practic ii da din nou libertatea de a produce.

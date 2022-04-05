@@ -10,7 +10,7 @@ import unittest
 import logging
 from logging.handlers import RotatingFileHandler
 
-from threading import Semaphore, Lock
+from threading import Semaphore
 from tema.atomic_integer import AtomicInteger
 from tema.product import Tea, Coffee
 
@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 
 formatter = logging.Formatter(fmt='%(asctime)s:%(message)s')
 
-handler = RotatingFileHandler('marketplace.log', maxBytes=8000, backupCount=10)
+handler = RotatingFileHandler('marketplace.log', maxBytes=20000, backupCount=10)
 formatter.converter = time.gmtime
 handler.setFormatter(formatter)
 
@@ -63,21 +63,6 @@ class TestMarketplace(unittest.TestCase):
         """
         for i in range(0, 80):
             self.assertEqual(self.marketplace.new_cart(), i)
-
-    def test_get_sem_position(self):
-        """
-            tests marketplaces' get_sem_position method
-        """
-        product_tea = Tea(name='TestTea', price=4, type='Herbal')
-        product_coffee = Coffee(name='TestCoffee', price=5,
-                                acidity='test_acidity',
-                                roast_level='test_roast_level')
-
-        self.assertEqual(self.marketplace.get_sem_position(product_tea),
-                        self.marketplace.available_teas_pos)
-
-        self.assertEqual(self.marketplace.get_sem_position(product_coffee),
-                        self.marketplace.available_coffees_pos)
 
     def test_add_to_cart(self):
         """
@@ -151,9 +136,8 @@ class Marketplace:
     """
     dictionary from producer_id to the semaphores used for the algorithm
     """
-    empty_semaphore_pos = 0
-    available_coffees_pos = 1
-    available_teas_pos = 2
+    full_semaphore_pos = 0
+    list_products_pos = 1
 
     def __init__(self, queue_size_per_producer):
         """
@@ -173,16 +157,12 @@ class Marketplace:
         Returns an id for the producer that calls this.
         """
         # for each producer, we are going to add a semaphore, one that
-        # marks whether new items can be produced
-        # the second one that holds info about the number of coffees
-        # available and the third one that holds the number of teas
-        # available
+        # stands for fullness and the other for emptyness
         id_producer = self.no_producers_registered.get_and_increment()
 
         self.info_producers[id_producer] = [
             Semaphore(value=self.queue_size_per_producer),
-            Semaphore(value=0),
-            Semaphore(value=0)]
+            []]
 
         logger.info(f"Producer with id: {id_producer} was registered")
         return id_producer
@@ -200,15 +180,14 @@ class Marketplace:
         :returns True or False. If the caller receives False, it should wait and then try again.
         """
 
-        result_acquire = self.info_producers[producer_id][self.empty_semaphore_pos].acquire(timeout=0.1)
+        # producer should not stay blocked until he has time to publish
+        result_acquire = self.info_producers[producer_id][self.full_semaphore_pos].acquire(timeout=0.1)
 
         if not result_acquire:
             logger.info(f"Producer with id:{producer_id} tried, but did not publish {product}")
             return False
-        if product.__class__.__name__ == 'Coffee':
-            self.info_producers[producer_id][self.available_coffees_pos].release()
-        if product.__class__.__name__ == 'Tea':
-            self.info_producers[producer_id][self.available_teas_pos].release()
+
+        self.info_producers[producer_id][self.list_products_pos].append(product)
 
         logger.info(f"Producer with id:{producer_id} published {product}")
         return True
@@ -226,22 +205,6 @@ class Marketplace:
         logger.info(f"Cart with id {id_cart} was created")
         return id_cart
 
-    def get_sem_position(self, product):
-        """
-        Gets the position for product
-
-        :type product: Product
-        :param product: product
-
-        :returns an int representing the semaphore position
-        """
-        if product.__class__.__name__ == 'Coffee':
-            look_for_pos = self.available_coffees_pos
-        elif product.__class__.__name__ == 'Tea':
-            look_for_pos = self.available_teas_pos
-        logger.info(f"For product: {product}, position to look at semaphores is {look_for_pos}")
-        return look_for_pos
-
     def add_to_cart(self, cart_id, product):
         """
         Adds a product to the given cart. The method returns
@@ -254,11 +217,9 @@ class Marketplace:
 
         :returns True or False. If the caller receives False, it should wait and then try again
         """
-        look_for_pos = self.get_sem_position(product)
-
-        for product_id, semaphores in self.info_producers.items():
-            result_acquire = semaphores[look_for_pos].acquire(timeout=0.1)
-            if result_acquire:
+        # check whether there is a producer that has the desired product
+        for product_id, [_, list_products] in self.info_producers.items():
+            if product in list_products:
                 self.info_carts[cart_id].append((product_id, product))
                 logger.info(f"{product} has been added to cart with id: {cart_id}")
                 return True
@@ -277,18 +238,13 @@ class Marketplace:
         :type product: Product
         :param product: the product to remove from cart
         """
-        look_for_position = self.get_sem_position(product)
-
         for (product_id, key) in self.info_carts[cart_id]:
             if key == product:
                 self.info_carts[cart_id].remove((product_id, key))
-                # remove one available product offered by product_id
-                self.info_producers[product_id][look_for_position].release()
                 logger.info(f"{product} was successfully removed from cart with id: {cart_id}")
                 return True
 
         logger.info(f"{product} was NOT removed from cart with id: {cart_id}")
-        #logger.info('%(product)s was not removed from cart with id: %(cart_id)d' % {name": name, "errno": errno })
         return False
 
     def place_order(self, cart_id):
@@ -299,7 +255,7 @@ class Marketplace:
         :param cart_id: id cart
         """
         for (prod_id, _) in self.info_carts[cart_id]:
-            self.info_producers[prod_id][self.empty_semaphore_pos].release()
+            self.info_producers[prod_id][self.full_semaphore_pos].release()
 
         logger.info(f"cart with id {cart_id} has the products {self.info_carts[cart_id]}")
         return self.info_carts[cart_id]
