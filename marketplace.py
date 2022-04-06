@@ -160,7 +160,7 @@ class Marketplace:
         # for each producer, we are going to add a semaphore, one that
         # stands for fullness and the other for emptyness
         id_producer = self.no_producers_registered.get_and_increment()
-        
+
         self.info_producers[id_producer] = [[], []]
 
         logger.info(f"Producer with id: {id_producer} was registered")

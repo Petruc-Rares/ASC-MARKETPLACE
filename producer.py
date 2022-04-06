@@ -51,5 +51,5 @@ class Producer(Thread):
                 for _ in range(1, quantity_product + 1):
                     # check if there is place to publish
                     while not self.marketplace.publish(id_producer, product[0]):
-                        sleep(self.republish_wait_time)    
+                        sleep(self.republish_wait_time)
                     sleep(time_production)
