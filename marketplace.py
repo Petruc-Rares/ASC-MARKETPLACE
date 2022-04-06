@@ -10,7 +10,7 @@ import unittest
 import logging
 from logging.handlers import RotatingFileHandler
 
-from threading import Semaphore
+from threading import Lock
 from tema.atomic_integer import AtomicInteger
 from tema.product import Tea, Coffee
 
@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 
 formatter = logging.Formatter(fmt='%(asctime)s:%(message)s')
 
-handler = RotatingFileHandler('marketplace.log', maxBytes=20000, backupCount=10)
+handler = RotatingFileHandler('marketplace.log', maxBytes=1000000, backupCount=10)
 formatter.converter = time.gmtime
 handler.setFormatter(formatter)
 
@@ -136,8 +136,8 @@ class Marketplace:
     """
     dictionary from producer_id to the semaphores used for the algorithm
     """
-    full_semaphore_pos = 0
-    list_products_pos = 1
+    available_products_pos = 0
+    reserved_products_pos  = 1
 
     def __init__(self, queue_size_per_producer):
         """
@@ -151,6 +151,7 @@ class Marketplace:
         self.no_last_cart = AtomicInteger()
         self.info_producers = {}
         self.info_carts = {}
+        self.lock = Lock()
 
     def register_producer(self):
         """
@@ -159,10 +160,8 @@ class Marketplace:
         # for each producer, we are going to add a semaphore, one that
         # stands for fullness and the other for emptyness
         id_producer = self.no_producers_registered.get_and_increment()
-
-        self.info_producers[id_producer] = [
-            Semaphore(value=self.queue_size_per_producer),
-            []]
+        
+        self.info_producers[id_producer] = [[], []]
 
         logger.info(f"Producer with id: {id_producer} was registered")
         return id_producer
@@ -180,16 +179,20 @@ class Marketplace:
         :returns True or False. If the caller receives False, it should wait and then try again.
         """
 
-        # producer should not stay blocked until he has time to publish
-        result_acquire = self.info_producers[producer_id][self.full_semaphore_pos].acquire(timeout=0.1)
+        # critical section, as place_order might modify list at the same time
+        self.lock.acquire()
 
-        if not result_acquire:
+        # check if the list of products for producer_id is full
+        if len(self.info_producers[producer_id][self.available_products_pos]) \
+         + len(self.info_producers[producer_id][self.reserved_products_pos])   \
+                == self.queue_size_per_producer:
             logger.info(f"Producer with id:{producer_id} tried, but did not publish {product}")
+            self.lock.release()
             return False
 
-        self.info_producers[producer_id][self.list_products_pos].append(product)
-
+        self.info_producers[producer_id][self.available_products_pos].append(product)
         logger.info(f"Producer with id:{producer_id} published {product}")
+        self.lock.release()
         return True
 
     def new_cart(self):
@@ -217,15 +220,21 @@ class Marketplace:
 
         :returns True or False. If the caller receives False, it should wait and then try again
         """
+
         # check whether there is a producer that has the desired product
-        for product_id, [_, list_products] in self.info_producers.items():
-            if product in list_products:
-                self.info_carts[cart_id].append((product_id, product))
+        self.lock.acquire()
+        for producer_id, [list_products_available, _] in self.info_producers.items():
+            if product in list_products_available:
+                self.info_carts[cart_id].append((producer_id, product))
+                self.info_producers[producer_id][self.available_products_pos].remove(product)
+                self.info_producers[producer_id][self.reserved_products_pos].append(product)
                 logger.info(f"{product} has been added to cart with id: {cart_id}")
+                self.lock.release()
                 return True
 
         # no producer has the desired product
         logger.info(f"{product} has NOT been added to cart with id: {cart_id}")
+        self.lock.release()
         return False
 
     def remove_from_cart(self, cart_id, product):
@@ -238,13 +247,18 @@ class Marketplace:
         :type product: Product
         :param product: the product to remove from cart
         """
-        for (product_id, key) in self.info_carts[cart_id]:
+        self.lock.acquire()
+        for (producer_id, key) in self.info_carts[cart_id]:
             if key == product:
-                self.info_carts[cart_id].remove((product_id, key))
+                self.info_carts[cart_id].remove((producer_id, key))
+                self.info_producers[producer_id][self.available_products_pos].append(product)
+                self.info_producers[producer_id][self.reserved_products_pos].remove(product)
                 logger.info(f"{product} was successfully removed from cart with id: {cart_id}")
+                self.lock.release()
                 return True
 
         logger.info(f"{product} was NOT removed from cart with id: {cart_id}")
+        self.lock.release()
         return False
 
     def place_order(self, cart_id):
@@ -254,10 +268,15 @@ class Marketplace:
         :type cart_id: Int
         :param cart_id: id cart
         """
-        for (prod_id, _) in self.info_carts[cart_id]:
-            self.info_producers[prod_id][self.full_semaphore_pos].release()
+
+        self.lock.acquire()
+
+        for (producer_id, product) in self.info_carts[cart_id]:
+            self.info_producers[producer_id][self.reserved_products_pos].remove(product)
 
         logger.info(f"cart with id {cart_id} has the products {self.info_carts[cart_id]}")
+
+        self.lock.release()
         return self.info_carts[cart_id]
 
 logging.shutdown()

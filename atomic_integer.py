@@ -27,5 +27,6 @@ class AtomicInteger:
         Returns the atomic integer incremented
         """
         with self.my_lock:
+            aux = self.number
             self.number = self.number + 1
-        return self.number - 1
+        return aux

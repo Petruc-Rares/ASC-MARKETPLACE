@@ -33,7 +33,7 @@ class Producer(Thread):
         @type kwargs:
         @param kwargs: other arguments that are passed to the Thread's __init__()
         """
-        super().__init__(kwargs=kwargs)
+        Thread.__init__(self, **kwargs)
         self.products = products
         self.marketplace = marketplace
         self.republish_wait_time = republish_wait_time
@@ -48,8 +48,8 @@ class Producer(Thread):
             for product in self.products:
                 quantity_product = product[self.quantity_product_pos]
                 time_production = product[self.wait_product_pos]
-                sleep(time_production)
                 for _ in range(1, quantity_product + 1):
                     # check if there is place to publish
                     while not self.marketplace.publish(id_producer, product[0]):
-                        sleep(self.republish_wait_time)
+                        sleep(self.republish_wait_time)    
+                    sleep(time_production)
