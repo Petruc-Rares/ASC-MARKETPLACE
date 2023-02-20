@@ -11,8 +11,8 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 from threading import Lock
-from tema.atomic_integer import AtomicInteger
-from tema.product import Tea, Coffee
+from atomic_integer import AtomicInteger
+from product import Tea, Coffee
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
